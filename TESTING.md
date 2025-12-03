@@ -347,6 +347,66 @@ print('Cleared', cleared, 'jobs')
 
 ---
 
+## Automated Test Suite
+
+### Running Automated Tests
+
+The plugin includes a comprehensive automated test suite for the dependency system:
+
+```bash
+cd /home/fernando/Projects/pluginbackgroundjobs
+nvim --headless --noplugin -u NONE -c "set rtp+=." -c "luafile tests/test_dependencies.lua"
+```
+
+### Test Coverage
+
+**Total Tests**: 58  
+**Current Status**: ✅ All tests passing (100%)
+
+The automated tests cover:
+
+1. **DAG Validation** (11 tests)
+   - Simple dependency chains
+   - Circular dependency prevention
+   - Diamond patterns
+   - Dependency limits (max 10)
+
+2. **Job.can_run()** (6 tests)
+   - Jobs with various dependency states
+   - Completion, failure, cancellation handling
+
+3. **Job.add_dependency()** (5 tests)
+   - Valid dependency addition
+   - Self-dependency prevention
+   - Cycle prevention
+
+4. **Job.remove_dependency()** (3 tests)
+   - Successful removal
+   - Error handling
+
+5. **Job Status and Display** (8 tests)
+   - All status icons and display strings
+   - Job skipping logic
+
+6. **dependency.get_ready_jobs()** (4 tests)
+   - Finding jobs ready to execute
+   - Dependency state validation
+
+7. **dependency.add() and remove()** (21 tests)
+   - Bidirectional updates
+   - Limit enforcement
+   - Error handling
+
+### Test Results (Latest Run)
+
+**Date**: 2025-12-03  
+**Branch**: `dags`  
+**Result**: ✅ **ALL 58 TESTS PASSED**
+
+See detailed test report in test output or run the tests yourself.
+
+---
+
 ## Reporting Issues
 
 If you encounter any issues during testing:
