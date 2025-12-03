@@ -12,6 +12,9 @@ M.state = {
   win = nil,          -- Window ID
   timer = nil,        -- Auto-refresh timer
   is_open = false,    -- Whether window is open
+  
+  -- Runtime column widths (can be adjusted interactively)
+  column_widths = nil,  -- Will be initialized from config
 }
 
 -- Setup highlight groups for the UI
@@ -105,6 +108,20 @@ local function setup_keymaps(buf)
   vim.keymap.set('n', '?', function()
     M.show_help()
   end, opts)
+  
+  -- Resize columns
+  vim.keymap.set('n', '[', function()
+    M.decrease_column_width()
+  end, opts)
+  
+  vim.keymap.set('n', ']', function()
+    M.increase_column_width()
+  end, opts)
+  
+  -- Reset column widths to default
+  vim.keymap.set('n', '=', function()
+    M.reset_column_widths()
+  end, opts)
 end
 
 -- Get the job ID from current line
@@ -114,6 +131,38 @@ local function get_job_id_from_line()
   -- The line starts with a box drawing character (│) followed by space and the ID
   local id = line:match('^│%s*(%d+)')
   return tonumber(id)
+end
+
+-- Identify which column the cursor is currently in
+-- Returns: column name or nil
+local function identify_column_at_cursor()
+  local line = vim.api.nvim_get_current_line()
+  local col = vim.fn.col('.') - 1  -- 0-based
+  
+  -- Skip if not in a data row (check for │ at start)
+  if not line:match('^│') then
+    return nil
+  end
+  
+  -- Calculate column positions based on current widths
+  local widths = M.state.column_widths
+  if not widths then return nil end
+  
+  local pos = 2  -- Start after "│ "
+  local columns = {'id', 'pipeline', 'name', 'status', 'depends', 'started', 'duration'}
+  
+  for _, col_name in ipairs(columns) do
+    local col_width = widths[col_name]
+    local col_end = pos + col_width + 3  -- +3 for " │ "
+    
+    if col >= pos and col < col_end then
+      return col_name
+    end
+    
+    pos = col_end
+  end
+  
+  return nil
 end
 
 -- Helper to build pipeline display string
@@ -207,37 +256,35 @@ function M.render()
   -- Get configuration
   local cfg = config.get()
   
-  -- Get window width for dynamic sizing
-  local win_width = 80  -- default
-  if M.state.win and vim.api.nvim_win_is_valid(M.state.win) then
-    win_width = vim.api.nvim_win_get_width(M.state.win)
+  -- Initialize column widths from config if not set
+  if not M.state.column_widths then
+    M.state.column_widths = vim.deepcopy(cfg.ui.column_widths or {
+      id = 4,
+      pipeline = 16,
+      name = 30,
+      status = 12,
+      depends = 12,
+      started = 10,
+      duration = 10,
+    })
   end
   
-  -- Define table width limits for better UX across different terminal sizes
-  local MIN_TABLE_WIDTH = cfg.ui.min_width or 100   -- Increased for new columns
-  local MAX_TABLE_WIDTH = cfg.ui.max_width or 150   -- Increased for new columns
-  
-  -- Constrain table width to reasonable limits
-  local table_width = math.min(MAX_TABLE_WIDTH, math.max(MIN_TABLE_WIDTH, win_width))
+  -- Use runtime column widths (can be adjusted by user)
+  local id_width = M.state.column_widths.id
+  local pipeline_width = M.state.column_widths.pipeline
+  local name_width = M.state.column_widths.name
+  local status_width = M.state.column_widths.status
+  local depends_width = M.state.column_widths.depends
+  local started_width = M.state.column_widths.started
+  local duration_width = M.state.column_widths.duration
   
   -- Calculate overhead: 8 pipes (│) + 14 padding spaces (2 per column × 7 columns)
   local OVERHEAD = 22
   
-  -- Define fixed column widths
-  local id_width = 4
-  local pipeline_width = 16
-  local status_width = 12
-  local depends_width = 12
-  local started_width = 10
-  local duration_width = 10
-  
-  -- Calculate total width of fixed columns
+  -- Calculate total width of all columns
   local fixed_cols_width = id_width + pipeline_width + status_width + depends_width + started_width + duration_width
   
-  -- Name column gets remaining space (with minimum of 15 to handle indentation)
-  local name_width = math.max(15, table_width - fixed_cols_width - OVERHEAD)
-  
-  -- Total width calculation (should always be <= win_width)
+  -- Total width calculation
   local total_width = fixed_cols_width + name_width + OVERHEAD
   
   -- Header line
@@ -329,7 +376,7 @@ function M.render()
   table.insert(highlights_to_apply, {line = #lines, hl_group = 'RJobsBorder'})
   
   -- Help text
-  local help_text = '<CR>: view │ d: delete │ c: cancel │ r: refresh │ q: close'
+  local help_text = '<CR>: view │ [/]: resize │ =: reset │ r: refresh │ q: close'
   local help_padding = math.max(0, total_width - 4 - #help_text)
   local help_left = math.floor(help_padding / 2)
   local help_right = help_padding - help_left
@@ -553,10 +600,84 @@ function M.show_help()
     '  q     - Close window',
     '  ?     - Show this help',
     '',
+    'Column Resizing:',
+    '  [     - Decrease column width',
+    '  ]     - Increase column width',
+    '  =     - Reset all columns to default',
+    '',
     'Press any key to close...',
   }
   
   vim.notify(table.concat(help, '\n'), vim.log.levels.INFO)
+end
+
+-- Increase column width under cursor
+function M.increase_column_width()
+  local col_name = identify_column_at_cursor()
+  
+  if not col_name then
+    vim.notify('Position cursor on a column to resize', vim.log.levels.WARN)
+    return
+  end
+  
+  -- Increase width by 2
+  M.state.column_widths[col_name] = M.state.column_widths[col_name] + 2
+  
+  -- Show feedback
+  vim.notify(
+    string.format('Column "%s" width: %d', col_name, M.state.column_widths[col_name]),
+    vim.log.levels.INFO
+  )
+  
+  -- Re-render
+  M.refresh()
+end
+
+-- Decrease column width under cursor
+function M.decrease_column_width()
+  local col_name = identify_column_at_cursor()
+  
+  if not col_name then
+    vim.notify('Position cursor on a column to resize', vim.log.levels.WARN)
+    return
+  end
+  
+  -- Minimum width is 4
+  if M.state.column_widths[col_name] <= 4 then
+    vim.notify('Column already at minimum width (4)', vim.log.levels.WARN)
+    return
+  end
+  
+  -- Decrease width by 2
+  M.state.column_widths[col_name] = M.state.column_widths[col_name] - 2
+  
+  -- Show feedback
+  vim.notify(
+    string.format('Column "%s" width: %d', col_name, M.state.column_widths[col_name]),
+    vim.log.levels.INFO
+  )
+  
+  -- Re-render
+  M.refresh()
+end
+
+-- Reset column widths to config defaults
+function M.reset_column_widths()
+  local cfg = config.get()
+  M.state.column_widths = vim.deepcopy(cfg.ui.column_widths or {
+    id = 4,
+    pipeline = 16,
+    name = 30,
+    status = 12,
+    depends = 12,
+    started = 10,
+    duration = 10,
+  })
+  
+  vim.notify('Column widths reset to defaults', vim.log.levels.INFO)
+  
+  -- Re-render
+  M.refresh()
 end
 
 -- Register callbacks with manager

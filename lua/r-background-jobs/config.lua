@@ -16,8 +16,19 @@ M.defaults = {
     orientation = 'horizontal',  -- 'horizontal' or 'vertical'
     show_winbar = true,          -- Show window title bar
     use_colors = true,           -- Use colored status indicators
-    min_width = 70,              -- Minimum table width
-    max_width = 100,             -- Maximum table width
+    min_width = 100,             -- Minimum table width
+    max_width = 150,             -- Maximum table width
+    
+    -- Column widths (set to 'auto' for dynamic calculation, or specify number)
+    column_widths = {
+      id = 4,
+      pipeline = 16,
+      name = 30,        -- Default name column width (increase if names are long)
+      status = 12,
+      depends = 12,
+      started = 10,
+      duration = 10,
+    },
   },
   
   -- Auto-refresh interval for jobs list (milliseconds)

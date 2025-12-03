@@ -94,6 +94,11 @@ require('r-background-jobs').setup({
 - `q` - Close window
 - `?` - Show help
 
+**Column Resizing:**
+- `[` - Decrease width of column under cursor
+- `]` - Increase width of column under cursor
+- `=` - Reset all column widths to defaults
+
 ## Configuration
 
 ```lua
@@ -109,6 +114,19 @@ require('r-background-jobs').setup({
     position = 'botright',      -- Split position
     size = 15,                   -- Lines (horizontal) or columns (vertical)
     orientation = 'horizontal',  -- 'horizontal' or 'vertical'
+    min_width = 100,             -- Minimum table width
+    max_width = 150,             -- Maximum table width
+    
+    -- Column widths (customize to your preference)
+    column_widths = {
+      id = 4,
+      pipeline = 16,
+      name = 30,        -- Increase if you have long script names
+      status = 12,
+      depends = 12,
+      started = 10,
+      duration = 10,
+    },
   },
   
   -- Auto-refresh interval for jobs list (milliseconds)
@@ -121,6 +139,27 @@ require('r-background-jobs').setup({
   },
 }
 ```
+
+### Customizing Column Widths
+
+You can adjust column widths in two ways:
+
+1. **In your config** (permanent):
+```lua
+require('r-background-jobs').setup({
+  ui = {
+    column_widths = {
+      name = 50,  -- Make name column wider
+      pipeline = 20,
+    }
+  }
+})
+```
+
+2. **Interactively while viewing jobs** (temporary):
+   - Position cursor on any column
+   - Press `]` to make it wider or `[` to make it narrower
+   - Press `=` to reset all columns to configured defaults
 
 ## Development Status
 
