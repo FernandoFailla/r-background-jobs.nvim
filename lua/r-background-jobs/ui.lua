@@ -69,8 +69,9 @@ end
 -- Get the job ID from current line
 local function get_job_id_from_line()
   local line = vim.api.nvim_get_current_line()
-  -- Extract ID from line (format: "ID  Name  Status...")
-  local id = line:match('^%s*(%d+)')
+  -- Extract ID from line (format: "│ ID  Name  Status...")
+  -- The line starts with a box drawing character (│) followed by space and the ID
+  local id = line:match('^│%s*(%d+)')
   return tonumber(id)
 end
 
