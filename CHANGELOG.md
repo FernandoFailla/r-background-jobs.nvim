@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.2] - 2025-12-03
+
+### Fixed
+- Fixed error when cancelling jobs: "bad argument #2 to 'format' (number expected, got nil)"
+- Updated on_exit callback in executor to handle nil exit_code from job shutdown
+- Added check to skip completion processing for already-cancelled jobs
+
 ## [0.1.1] - 2025-12-03
 
 ### Fixed

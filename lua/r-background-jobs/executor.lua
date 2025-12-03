@@ -63,6 +63,17 @@ function M.execute_job(job)
     -- Handle process exit
     on_exit = function(j, exit_code)
       vim.schedule(function()
+        -- Get the current job to check its status
+        local current_job = manager.get_job(job.id)
+        
+        -- If job was already cancelled, skip completion processing
+        if current_job and current_job.status == 'cancelled' then
+          return
+        end
+        
+        -- Ensure exit_code is a number (handle nil from shutdown/cancel)
+        exit_code = exit_code or -1
+        
         -- Write completion message to output
         local completion_msg = string.format(
           '\n--- Job completed with exit code: %d ---\n',
