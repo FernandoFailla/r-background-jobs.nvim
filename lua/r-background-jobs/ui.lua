@@ -14,6 +14,42 @@ M.state = {
   is_open = false,    -- Whether window is open
 }
 
+-- Setup highlight groups for the UI
+local function setup_highlights()
+  -- Define highlight groups if they don't exist
+  local highlights = {
+    RJobsBorder = { link = 'FloatBorder' },
+    RJobsHeader = { link = 'Title', bold = true },
+    RJobsTitle = { link = 'Title', bold = true },
+    RJobsRunning = { fg = '#61afef', bold = true },  -- Blue
+    RJobsCompleted = { fg = '#98c379', bold = true }, -- Green
+    RJobsFailed = { fg = '#e06c75', bold = true },    -- Red
+    RJobsCancelled = { fg = '#d19a66', bold = true }, -- Orange
+    RJobsHelp = { link = 'Comment', italic = true },
+  }
+  
+  for group, opts in pairs(highlights) do
+    vim.api.nvim_set_hl(0, group, opts)
+  end
+end
+
+-- Helper to truncate string with ellipsis
+local function truncate(str, max_len)
+  if #str <= max_len then
+    return str
+  end
+  return str:sub(1, max_len - 3) .. '...'
+end
+
+-- Helper to pad string to exact length
+local function pad(str, len)
+  local str_len = vim.fn.strdisplaywidth(str)
+  if str_len >= len then
+    return truncate(str, len)
+  end
+  return str .. string.rep(' ', len - str_len)
+end
+
 -- Create the jobs list buffer
 local function create_buffer()
   local buf = vim.api.nvim_create_buf(false, true)
@@ -76,42 +112,6 @@ local function get_job_id_from_line()
   -- The line starts with a box drawing character (│) followed by space and the ID
   local id = line:match('^│%s*(%d+)')
   return tonumber(id)
-end
-
--- Setup highlight groups for the UI
-local function setup_highlights()
-  -- Define highlight groups if they don't exist
-  local highlights = {
-    RJobsBorder = { link = 'FloatBorder' },
-    RJobsHeader = { link = 'Title', bold = true },
-    RJobsTitle = { link = 'Title', bold = true },
-    RJobsRunning = { fg = '#61afef', bold = true },  -- Blue
-    RJobsCompleted = { fg = '#98c379', bold = true }, -- Green
-    RJobsFailed = { fg = '#e06c75', bold = true },    -- Red
-    RJobsCancelled = { fg = '#d19a66', bold = true }, -- Orange
-    RJobsHelp = { link = 'Comment', italic = true },
-  }
-  
-  for group, opts in pairs(highlights) do
-    vim.api.nvim_set_hl(0, group, opts)
-  end
-end
-
--- Helper to truncate string with ellipsis
-local function truncate(str, max_len)
-  if #str <= max_len then
-    return str
-  end
-  return str:sub(1, max_len - 3) .. '...'
-end
-
--- Helper to pad string to exact length
-local function pad(str, len)
-  local str_len = vim.fn.strdisplaywidth(str)
-  if str_len >= len then
-    return truncate(str, len)
-  end
-  return str .. string.rep(' ', len - str_len)
 end
 
 -- Render the jobs list
