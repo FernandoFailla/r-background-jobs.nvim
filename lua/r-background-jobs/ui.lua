@@ -25,6 +25,8 @@ local function setup_highlights()
     RJobsCompleted = { fg = '#98c379', bold = true }, -- Green
     RJobsFailed = { fg = '#e06c75', bold = true },    -- Red
     RJobsCancelled = { fg = '#d19a66', bold = true }, -- Orange
+    RJobsPending = { fg = '#e5c07b', bold = true },   -- Yellow
+    RJobsSkipped = { fg = '#abb2bf', bold = true },   -- Gray
     RJobsHelp = { link = 'Comment', italic = true },
   }
   
@@ -114,6 +116,84 @@ local function get_job_id_from_line()
   return tonumber(id)
 end
 
+-- Helper to build pipeline display string
+local function build_pipeline_display(job)
+  if not job.pipeline_name then
+    return '-'
+  end
+  
+  -- Calculate pipeline position if available
+  if job.pipeline_position and job.pipeline_total then
+    return string.format('[%s] %d/%d', job.pipeline_name, job.pipeline_position, job.pipeline_total)
+  else
+    return string.format('[%s]', job.pipeline_name)
+  end
+end
+
+-- Helper to build depends display string
+local function build_depends_display(job)
+  if not job.depends_on or #job.depends_on == 0 then
+    return '-'
+  end
+  
+  -- Show as "→ #1,#2,#3"
+  local ids = {}
+  for _, id in ipairs(job.depends_on) do
+    table.insert(ids, '#' .. tostring(id))
+  end
+  return '→ ' .. table.concat(ids, ',')
+end
+
+-- Helper to build indented name with pipeline hierarchy
+local function build_name_with_indent(job, all_jobs)
+  local name = job.name
+  
+  -- Calculate indentation based on dependency depth
+  if job.depends_on and #job.depends_on > 0 then
+    -- Find the maximum depth by traversing dependencies
+    local depth = 0
+    local visited = {}
+    
+    local function calc_depth(job_id, current_depth)
+      if visited[job_id] then
+        return current_depth
+      end
+      visited[job_id] = true
+      
+      local j = nil
+      for _, jj in ipairs(all_jobs) do
+        if jj.id == job_id then
+          j = jj
+          break
+        end
+      end
+      
+      if not j or not j.depends_on or #j.depends_on == 0 then
+        return current_depth
+      end
+      
+      local max_depth = current_depth
+      for _, dep_id in ipairs(j.depends_on) do
+        local d = calc_depth(dep_id, current_depth + 1)
+        if d > max_depth then
+          max_depth = d
+        end
+      end
+      return max_depth
+    end
+    
+    depth = calc_depth(job.id, 0)
+    
+    -- Add indentation (2 spaces per level) and tree character
+    if depth > 0 then
+      local indent = string.rep('  ', depth)
+      name = indent .. '└─ ' .. name
+    end
+  end
+  
+  return name
+end
+
 -- Render the jobs list
 function M.render()
   if not M.state.buf or not vim.api.nvim_buf_is_valid(M.state.buf) then
@@ -134,26 +214,28 @@ function M.render()
   end
   
   -- Define table width limits for better UX across different terminal sizes
-  local MIN_TABLE_WIDTH = cfg.ui.min_width or 70   -- Minimum width to prevent breaking
-  local MAX_TABLE_WIDTH = cfg.ui.max_width or 100  -- Maximum width for comfortable reading
+  local MIN_TABLE_WIDTH = cfg.ui.min_width or 100   -- Increased for new columns
+  local MAX_TABLE_WIDTH = cfg.ui.max_width or 150   -- Increased for new columns
   
   -- Constrain table width to reasonable limits
   local table_width = math.min(MAX_TABLE_WIDTH, math.max(MIN_TABLE_WIDTH, win_width))
   
-  -- Calculate overhead: 6 pipes (│) + 10 padding spaces (2 per column × 5 columns)
-  local OVERHEAD = 16
+  -- Calculate overhead: 8 pipes (│) + 14 padding spaces (2 per column × 7 columns)
+  local OVERHEAD = 22
   
   -- Define fixed column widths
   local id_width = 4
-  local status_width = 14
+  local pipeline_width = 16
+  local status_width = 12
+  local depends_width = 12
   local started_width = 10
   local duration_width = 10
   
   -- Calculate total width of fixed columns
-  local fixed_cols_width = id_width + status_width + started_width + duration_width
+  local fixed_cols_width = id_width + pipeline_width + status_width + depends_width + started_width + duration_width
   
-  -- Name column gets remaining space (with minimum of 10)
-  local name_width = math.max(10, table_width - fixed_cols_width - OVERHEAD)
+  -- Name column gets remaining space (with minimum of 15 to handle indentation)
+  local name_width = math.max(15, table_width - fixed_cols_width - OVERHEAD)
   
   -- Total width calculation (should always be <= win_width)
   local total_width = fixed_cols_width + name_width + OVERHEAD
@@ -168,10 +250,12 @@ function M.render()
   
   -- Column headers
   local header = string.format(
-    '│ %s │ %s │ %s │ %s │ %s │',
+    '│ %s │ %s │ %s │ %s │ %s │ %s │ %s │',
     pad('ID', id_width),
+    pad('Pipeline', pipeline_width),
     pad('Name', name_width),
     pad('Status', status_width),
+    pad('Depends', depends_width),
     pad('Started', started_width),
     pad('Duration', duration_width)
   )
@@ -180,10 +264,12 @@ function M.render()
   
   -- Separator line
   local separator = string.format(
-    '├%s┼%s┼%s┼%s┼%s┤',
+    '├%s┼%s┼%s┼%s┼%s┼%s┼%s┤',
     string.rep('─', id_width + 2),
+    string.rep('─', pipeline_width + 2),
     string.rep('─', name_width + 2),
     string.rep('─', status_width + 2),
+    string.rep('─', depends_width + 2),
     string.rep('─', started_width + 2),
     string.rep('─', duration_width + 2)
   )
@@ -200,10 +286,12 @@ function M.render()
   else
     for _, job in ipairs(jobs) do
       local line = string.format(
-        '│ %s │ %s │ %s │ %s │ %s │',
+        '│ %s │ %s │ %s │ %s │ %s │ %s │ %s │',
         pad(tostring(job.id), id_width),
-        pad(job.name, name_width),
+        pad(build_pipeline_display(job), pipeline_width),
+        pad(build_name_with_indent(job, jobs), name_width),
         pad(job:get_status_display(), status_width),
+        pad(build_depends_display(job), depends_width),
         pad(job:get_start_time_str(), started_width),
         pad(job:get_duration_str(), duration_width)
       )
@@ -219,14 +307,19 @@ function M.render()
         hl_group = 'RJobsFailed'
       elseif job.status == 'cancelled' then
         hl_group = 'RJobsCancelled'
+      elseif job.status == 'pending' then
+        hl_group = 'RJobsPending'
+      elseif job.status == 'skipped' then
+        hl_group = 'RJobsSkipped'
       end
       
       -- Highlight the status column
+      local status_col_start = id_width + pipeline_width + name_width + 12
       table.insert(highlights_to_apply, {
         line = #lines,
         hl_group = hl_group,
-        col_start = id_width + name_width + 8,  -- Start of status column
-        col_end = id_width + name_width + status_width + 8  -- End of status column
+        col_start = status_col_start,
+        col_end = status_col_start + status_width
       })
     end
   end

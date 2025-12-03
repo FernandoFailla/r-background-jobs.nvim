@@ -5,10 +5,12 @@ local M = {}
 
 -- Job statuses
 M.STATUS = {
+  PENDING = 'pending',      -- Waiting for dependencies
   RUNNING = 'running',
   COMPLETED = 'completed',
   FAILED = 'failed',
   CANCELLED = 'cancelled',
+  SKIPPED = 'skipped',      -- Skipped due to failed dependency
 }
 
 -- Create a new job object
@@ -25,6 +27,19 @@ function M.new(script_path)
     pid = nil,
     output_file = nil,
     plenary_job = nil,  -- Will hold the plenary Job object
+    
+    -- Dependencies
+    depends_on = nil,     -- Array of job IDs this job depends on
+    dependents = nil,     -- Array of job IDs that depend on this job
+    
+    -- Pipeline info
+    pipeline_id = nil,       -- Unique pipeline ID (if part of a pipeline)
+    pipeline_name = nil,     -- Human-readable pipeline name
+    pipeline_position = nil, -- Position in pipeline (1, 2, 3...)
+    pipeline_total = nil,    -- Total jobs in pipeline
+    
+    -- Skip reason (if status is SKIPPED)
+    skip_reason = nil,
   }
   
   -- Set metatable for methods
@@ -76,6 +91,10 @@ function M:get_status_icon()
     return '✗'
   elseif self.status == M.STATUS.CANCELLED then
     return '✕'
+  elseif self.status == M.STATUS.PENDING then
+    return '⏳'
+  elseif self.status == M.STATUS.SKIPPED then
+    return '⊘'
   else
     return '?'
   end
@@ -88,13 +107,17 @@ function M:get_status_display()
   local status_text = self.status:sub(1, 1):upper() .. self.status:sub(2)
   
   if self.status == M.STATUS.RUNNING then
-    return icon .. ' ' .. status_text
+    return icon .. ' Running'
   elseif self.status == M.STATUS.COMPLETED then
     return icon .. ' Done'
   elseif self.status == M.STATUS.FAILED then
     return icon .. ' Failed'
   elseif self.status == M.STATUS.CANCELLED then
     return icon .. ' Cancelled'
+  elseif self.status == M.STATUS.PENDING then
+    return icon .. ' Pending'
+  elseif self.status == M.STATUS.SKIPPED then
+    return icon .. ' Skipped'
   else
     return status_text
   end
@@ -116,6 +139,116 @@ end
 function M:mark_cancelled()
   self.status = M.STATUS.CANCELLED
   self.end_time = os.time()
+end
+
+-- Mark job as skipped
+-- @param reason string Reason for skipping
+function M:mark_skipped(reason)
+  self.status = M.STATUS.SKIPPED
+  self.end_time = os.time()
+  self.skip_reason = reason or "Dependency failed"
+end
+
+-- Check if job can run (all dependencies satisfied)
+-- @return boolean Can run
+-- @return string Reason if cannot run
+function M:can_run()
+  -- If no dependencies, can always run
+  if not self.depends_on or #self.depends_on == 0 then
+    return true, "No dependencies"
+  end
+  
+  local manager = require('r-background-jobs.manager')
+  
+  -- Check each dependency
+  for _, dep_id in ipairs(self.depends_on) do
+    local dep_job = manager.get_job(dep_id)
+    
+    if not dep_job then
+      return false, "Dependency job " .. dep_id .. " not found"
+    end
+    
+    -- If any dependency failed or was cancelled, cannot run
+    if dep_job.status == M.STATUS.FAILED or dep_job.status == M.STATUS.CANCELLED then
+      return false, "Dependency job " .. dep_id .. " failed/cancelled"
+    end
+    
+    -- If any dependency not completed yet, cannot run
+    if dep_job.status ~= M.STATUS.COMPLETED then
+      return false, "Dependency job " .. dep_id .. " not yet completed"
+    end
+  end
+  
+  return true, "All dependencies satisfied"
+end
+
+-- Add dependency to this job
+-- @param dep_id number Job ID to depend on
+-- @return boolean Success
+-- @return string Error message if failed
+function M:add_dependency(dep_id)
+  -- Initialize depends_on if needed
+  if not self.depends_on then
+    self.depends_on = {}
+  end
+  
+  -- Check if already depends on this job
+  for _, existing_dep_id in ipairs(self.depends_on) do
+    if existing_dep_id == dep_id then
+      return false, "Already depends on job " .. dep_id
+    end
+  end
+  
+  -- Validate DAG (no cycles)
+  local dependency = require('r-background-jobs.dependency')
+  local valid, err = dependency.validate_dag(self.id, dep_id)
+  if not valid then
+    return false, err
+  end
+  
+  -- Add dependency
+  table.insert(self.depends_on, dep_id)
+  
+  -- Update the dependency's dependents list
+  local manager = require('r-background-jobs.manager')
+  local dep_job = manager.get_job(dep_id)
+  if dep_job then
+    dep_job.dependents = dep_job.dependents or {}
+    table.insert(dep_job.dependents, self.id)
+  end
+  
+  return true
+end
+
+-- Remove dependency from this job
+-- @param dep_id number Job ID to remove dependency on
+-- @return boolean Success
+function M:remove_dependency(dep_id)
+  if not self.depends_on then
+    return false
+  end
+  
+  for i, existing_dep_id in ipairs(self.depends_on) do
+    if existing_dep_id == dep_id then
+      table.remove(self.depends_on, i)
+      
+      -- Update the dependency's dependents list
+      local manager = require('r-background-jobs.manager')
+      local dep_job = manager.get_job(dep_id)
+      if dep_job and dep_job.dependents then
+        for j, dependent_id in ipairs(dep_job.dependents) do
+          if dependent_id == self.id then
+            table.remove(dep_job.dependents, j)
+            break
+          end
+        end
+      end
+      
+      return true
+    end
+  end
+  
+  return false
 end
 
 -- Get job info as a table for display

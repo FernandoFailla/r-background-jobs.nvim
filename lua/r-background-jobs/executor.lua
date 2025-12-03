@@ -115,27 +115,68 @@ end
 
 -- Start a new job from script path
 -- @param script_path string Path to R script
+-- @param opts table Optional configuration {depends_on = {1,2}, pipeline_name = "X", pipeline_id = "Y"}
 -- @return table|nil Job object or nil on error
 -- @return string|nil Error message if failed
-function M.start_job(script_path)
+function M.start_job(script_path, opts)
+  opts = opts or {}
+  
   -- Create job in manager
   local job, err = manager.create_job(script_path)
   if not job then
     return nil, err
   end
   
-  -- Execute the job
-  local success, exec_err = M.execute_job(job)
-  if not success then
-    -- Remove job from manager if execution failed
-    manager.delete_job(job.id)
-    return nil, exec_err
+  -- Set dependencies if provided
+  if opts.depends_on and #opts.depends_on > 0 then
+    job.depends_on = opts.depends_on
+    job.status = 'pending'  -- Start as pending if has dependencies
+    
+    -- Update the dependency jobs to know that this job depends on them
+    for _, dep_id in ipairs(opts.depends_on) do
+      local dep_job = manager.get_job(dep_id)
+      if dep_job then
+        dep_job.dependents = dep_job.dependents or {}
+        table.insert(dep_job.dependents, job.id)
+      else
+        -- Dependency not found, clean up and fail
+        manager.delete_job(job.id)
+        return nil, "Dependency job not found: " .. dep_id
+      end
+    end
   end
   
-  vim.notify(
-    string.format('Started job %d: %s', job.id, job.name),
-    vim.log.levels.INFO
-  )
+  -- Set pipeline info if provided
+  if opts.pipeline_name then
+    job.pipeline_name = opts.pipeline_name
+    job.pipeline_id = opts.pipeline_id
+    job.pipeline_position = opts.pipeline_position
+    job.pipeline_total = opts.pipeline_total
+  end
+  
+  -- Check if can execute immediately
+  local can_run, reason = job:can_run()
+  
+  if can_run then
+    -- Execute the job immediately
+    local success, exec_err = M.execute_job(job)
+    if not success then
+      -- Remove job from manager if execution failed
+      manager.delete_job(job.id)
+      return nil, exec_err
+    end
+    
+    vim.notify(
+      string.format('Started job %d: %s', job.id, job.name),
+      vim.log.levels.INFO
+    )
+  else
+    -- Job is pending, waiting for dependencies
+    vim.notify(
+      string.format('Job %d (%s) pending: %s', job.id, job.name, reason),
+      vim.log.levels.INFO
+    )
+  end
   
   return job
 end

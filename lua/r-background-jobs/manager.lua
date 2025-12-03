@@ -179,6 +179,9 @@ function M.mark_job_completed(id)
   if job then
     job:mark_completed()
     trigger_callbacks('on_job_complete', job)
+    
+    -- Check and start dependent jobs
+    M.check_and_start_dependents(id)
   end
 end
 
@@ -189,6 +192,9 @@ function M.mark_job_failed(id)
   if job then
     job:mark_failed()
     trigger_callbacks('on_job_complete', job)
+    
+    -- Propagate failure to dependents (mark as skipped)
+    M.check_and_start_dependents(id)
   end
 end
 
@@ -217,6 +223,71 @@ function M.get_running_count()
     end
   end
   return count
+end
+
+-- Get pending jobs
+-- @return table Array of pending jobs
+function M.get_pending_jobs()
+  local pending = {}
+  for _, job in ipairs(M.jobs) do
+    if job.status == 'pending' then
+      table.insert(pending, job)
+    end
+  end
+  return pending
+end
+
+-- Check and start dependent jobs after a job completes/fails
+-- @param job_id number Job ID that just completed or failed
+function M.check_and_start_dependents(job_id)
+  local executor = require('r-background-jobs.executor')
+  
+  local job = M.get_job(job_id)
+  if not job or not job.dependents then
+    return
+  end
+  
+  -- For each dependent job
+  for _, dependent_id in ipairs(job.dependents) do
+    local dependent = M.get_job(dependent_id)
+    
+    if dependent and dependent.status == 'pending' then
+      local can_run, reason = dependent:can_run()
+      
+      if can_run then
+        -- All dependencies satisfied, start the job
+        vim.notify(
+          string.format('Starting dependent job %d: %s', dependent_id, dependent.name),
+          vim.log.levels.INFO
+        )
+        executor.execute_job(dependent)
+      else
+        -- Check if any dependency failed/cancelled
+        local should_skip = false
+        if dependent.depends_on then
+          for _, dep_id in ipairs(dependent.depends_on) do
+            local dep = M.get_job(dep_id)
+            if dep and (dep.status == 'failed' or dep.status == 'cancelled') then
+              should_skip = true
+              break
+            end
+          end
+        end
+        
+        if should_skip then
+          -- Mark as skipped and propagate to its dependents
+          dependent:mark_skipped(reason)
+          vim.notify(
+            string.format('Job %d (%s) skipped: %s', dependent_id, dependent.name, reason),
+            vim.log.levels.WARN
+          )
+          
+          -- Recursively check this job's dependents
+          M.check_and_start_dependents(dependent_id)
+        end
+      end
+    end
+  end
 end
 
 -- Clear all jobs (for testing/debugging)
