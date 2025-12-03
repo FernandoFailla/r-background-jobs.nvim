@@ -1,0 +1,295 @@
+*r-background-jobs.txt*  Background job execution for R scripts in Neovim
+
+==============================================================================
+CONTENTS                                        *r-background-jobs-contents*
+
+    1. Introduction .................... |r-background-jobs-intro|
+    2. Requirements .................... |r-background-jobs-requirements|
+    3. Installation .................... |r-background-jobs-installation|
+    4. Configuration ................... |r-background-jobs-configuration|
+    5. Commands ........................ |r-background-jobs-commands|
+    6. API ............................. |r-background-jobs-api|
+    7. License ......................... |r-background-jobs-license|
+
+==============================================================================
+1. INTRODUCTION                                    *r-background-jobs-intro*
+
+r-background-jobs.nvim brings RStudio-like background job execution to R
+development in Neovim. Run R scripts asynchronously without blocking your
+editor, monitor job progress in real-time, and manage multiple jobs from
+an intuitive split window interface.
+
+Features:
+- Run R scripts asynchronously in background jobs
+- Toggle split window UI showing job status and progress
+- Real-time output capture (stdout and stderr)
+- Job control: start, cancel, view output, and manage jobs
+- Telescope integration for job selection
+- Works with any R setup (requires Rscript in PATH)
+
+==============================================================================
+2. REQUIREMENTS                              *r-background-jobs-requirements*
+
+- Neovim >= 0.8.0
+- plenary.nvim (required) https://github.com/nvim-lua/plenary.nvim
+- telescope.nvim (optional) https://github.com/nvim-telescope/telescope.nvim
+- R and Rscript installed and available in PATH
+
+==============================================================================
+3. INSTALLATION                              *r-background-jobs-installation*
+
+Using lazy.nvim: >lua
+    {
+      'yourusername/r-background-jobs.nvim',
+      dependencies = {
+        'nvim-lua/plenary.nvim',
+        'nvim-telescope/telescope.nvim',  -- Optional
+      },
+      config = function()
+        require('r-background-jobs').setup()
+      end
+    }
+<
+
+Using packer.nvim: >lua
+    use {
+      'yourusername/r-background-jobs.nvim',
+      requires = {
+        'nvim-lua/plenary.nvim',
+        'nvim-telescope/telescope.nvim',  -- Optional
+      },
+      config = function()
+        require('r-background-jobs').setup()
+      end
+    }
+<
+
+==============================================================================
+4. CONFIGURATION                            *r-background-jobs-configuration*
+
+Default configuration: >lua
+    require('r-background-jobs').setup({
+      -- Path to Rscript executable
+      rscript_path = 'Rscript',
+      
+      -- Output directory for job logs
+      output_dir = vim.fn.stdpath('data') .. '/r-jobs',
+      
+      -- UI settings
+      ui = {
+        position = 'botright',      -- Split position
+        size = 15,                   -- Lines (horizontal) or columns (vertical)
+        orientation = 'horizontal',  -- 'horizontal' or 'vertical'
+      },
+      
+      -- Auto-refresh interval for jobs list (milliseconds)
+      refresh_interval = 1000,
+      
+      -- Default keybindings (set to false to disable)
+      keybindings = {
+        toggle_jobs = '<leader>rj',
+        start_job = '<leader>rs',
+      },
+    })
+<
+
+Configuration options:
+
+rscript_path                                  *r-background-jobs-rscript_path*
+    Type: string
+    Default: 'Rscript'
+    Path to the Rscript executable. Can be absolute or just 'Rscript' if
+    it's in your PATH.
+
+output_dir                                      *r-background-jobs-output_dir*
+    Type: string
+    Default: vim.fn.stdpath('data') .. '/r-jobs'
+    Directory where job output files are saved. Output files are kept until
+    manually cleared with :RJobClear.
+
+ui                                                      *r-background-jobs-ui*
+    Type: table
+    UI configuration for the jobs list window.
+    
+    ui.position
+        Split position: 'botright', 'topleft', 'rightbelow', etc.
+    ui.size
+        Window size (lines for horizontal, columns for vertical)
+    ui.orientation
+        'horizontal' or 'vertical'
+
+refresh_interval                          *r-background-jobs-refresh_interval*
+    Type: number
+    Default: 1000
+    Auto-refresh interval for the jobs list in milliseconds.
+
+keybindings                                      *r-background-jobs-keybindings*
+    Type: table or false
+    Default keybindings. Set to false to disable all default keybindings.
+    
+    keybindings.toggle_jobs
+        Keybinding to toggle jobs list window
+    keybindings.start_job
+        Keybinding to start job from current file
+
+==============================================================================
+5. COMMANDS                                      *r-background-jobs-commands*
+
+:RJobStart [file]                                              *:RJobStart*
+    Start a background job from an R script file.
+    If no file is specified, uses the current buffer.
+    The file must have a .R or .r extension.
+    
+    Example: >vim
+        :RJobStart ~/scripts/analysis.R
+        :RJobStart    " Uses current file
+<
+
+:RJobsList                                                      *:RJobsList*
+    Toggle the jobs list window.
+    The window shows all running and completed jobs with their status,
+    start time, and duration.
+
+:RJobCancel [id]                                              *:RJobCancel*
+    Cancel a running job.
+    If no ID is provided, opens a picker (Telescope or vim.ui.select)
+    to select which job to cancel.
+    
+    Example: >vim
+        :RJobCancel 3
+        :RJobCancel    " Opens picker
+<
+
+:RJobOutput [id]                                              *:RJobOutput*
+    View job output in a split window.
+    If no ID is provided, opens a picker to select which job's output
+    to view.
+    
+    Example: >vim
+        :RJobOutput 3
+        :RJobOutput    " Opens picker
+<
+
+:RJobClear                                                      *:RJobClear*
+    Clear all finished (completed, failed, or cancelled) jobs from the list.
+    Prompts for confirmation before clearing.
+
+:RJobInfo [id]                                                  *:RJobInfo*
+    Show detailed information about a job.
+    If no ID is provided, opens a picker to select which job to inspect.
+    
+    Example: >vim
+        :RJobInfo 3
+        :RJobInfo    " Opens picker
+<
+
+Jobs List Window Keybindings                  *r-background-jobs-window-keys*
+
+When the jobs list window is open, these keybindings are available:
+
+    <CR>    View job output
+    c       Cancel selected job
+    d       Delete job from list
+    r       Refresh list
+    q       Close window
+    ?       Show help
+
+==============================================================================
+6. API                                              *r-background-jobs-api*
+
+The plugin exposes a Lua API for programmatic access:
+
+setup({opts})                                    *r-background-jobs.setup()*
+    Initialize the plugin with optional configuration.
+    
+    Parameters: ~
+        {opts}  (table) Configuration options
+    
+    Example: >lua
+        require('r-background-jobs').setup({
+          ui = { size = 20 },
+        })
+<
+
+start_job({script_path})                    *r-background-jobs.start_job()*
+    Start a background job from a script path.
+    
+    Parameters: ~
+        {script_path}  (string) Path to R script
+    
+    Returns: ~
+        (table|nil) Job object or nil on error
+    
+    Example: >lua
+        local job = require('r-background-jobs').start_job('~/analysis.R')
+        if job then
+          print('Started job ' .. job.id)
+        end
+<
+
+cancel_job({job_id})                        *r-background-jobs.cancel_job()*
+    Cancel a running job.
+    
+    Parameters: ~
+        {job_id}  (number) Job ID
+    
+    Returns: ~
+        (boolean) Success status
+
+get_jobs()                                    *r-background-jobs.get_jobs()*
+    Get all jobs.
+    
+    Returns: ~
+        (table) Array of job objects
+
+get_job({job_id})                              *r-background-jobs.get_job()*
+    Get a specific job by ID.
+    
+    Parameters: ~
+        {job_id}  (number) Job ID
+    
+    Returns: ~
+        (table|nil) Job object or nil if not found
+
+toggle_ui()                                  *r-background-jobs.toggle_ui()*
+    Toggle the jobs list window.
+
+open_ui()                                      *r-background-jobs.open_ui()*
+    Open the jobs list window.
+
+close_ui()                                    *r-background-jobs.close_ui()*
+    Close the jobs list window.
+
+clear_finished()                        *r-background-jobs.clear_finished()*
+    Clear all finished jobs.
+    
+    Returns: ~
+        (number) Number of jobs cleared
+
+==============================================================================
+7. LICENSE                                      *r-background-jobs-license*
+
+MIT License
+
+Copyright (c) 2024 r-background-jobs.nvim contributors
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+==============================================================================
+vim:tw=78:ts=8:ft=help:norl:
