@@ -28,6 +28,9 @@ local function create_buffer()
   -- Set buffer name
   vim.api.nvim_buf_set_name(buf, 'R Background Jobs')
   
+  -- Setup highlights
+  setup_highlights()
+  
   return buf
 end
 
@@ -75,6 +78,42 @@ local function get_job_id_from_line()
   return tonumber(id)
 end
 
+-- Setup highlight groups for the UI
+local function setup_highlights()
+  -- Define highlight groups if they don't exist
+  local highlights = {
+    RJobsBorder = { link = 'FloatBorder' },
+    RJobsHeader = { link = 'Title', bold = true },
+    RJobsTitle = { link = 'Title', bold = true },
+    RJobsRunning = { fg = '#61afef', bold = true },  -- Blue
+    RJobsCompleted = { fg = '#98c379', bold = true }, -- Green
+    RJobsFailed = { fg = '#e06c75', bold = true },    -- Red
+    RJobsCancelled = { fg = '#d19a66', bold = true }, -- Orange
+    RJobsHelp = { link = 'Comment', italic = true },
+  }
+  
+  for group, opts in pairs(highlights) do
+    vim.api.nvim_set_hl(0, group, opts)
+  end
+end
+
+-- Helper to truncate string with ellipsis
+local function truncate(str, max_len)
+  if #str <= max_len then
+    return str
+  end
+  return str:sub(1, max_len - 3) .. '...'
+end
+
+-- Helper to pad string to exact length
+local function pad(str, len)
+  local str_len = vim.fn.strdisplaywidth(str)
+  if str_len >= len then
+    return truncate(str, len)
+  end
+  return str .. string.rep(' ', len - str_len)
+end
+
 -- Render the jobs list
 function M.render()
   if not M.state.buf or not vim.api.nvim_buf_is_valid(M.state.buf) then
@@ -83,42 +122,139 @@ function M.render()
   
   local jobs = manager.get_jobs()
   local lines = {}
+  local highlights_to_apply = {}
   
-  -- Header
-  table.insert(lines, '┌─ R Background Jobs ──────────────────────────────────────┐')
-  table.insert(lines, string.format(
-    '│ %-4s  %-25s %-12s %-10s %-8s │',
-    'ID', 'Name', 'Status', 'Started', 'Duration'
-  ))
-  table.insert(lines, '│ ──────────────────────────────────────────────────────── │')
+  -- Get window width for dynamic sizing
+  local win_width = 80  -- default
+  if M.state.win and vim.api.nvim_win_is_valid(M.state.win) then
+    win_width = vim.api.nvim_win_get_width(M.state.win)
+  end
+  
+  -- Calculate column widths dynamically
+  local id_width = 4
+  local status_width = 14
+  local started_width = 10
+  local duration_width = 10
+  local separator_width = 9  -- │ between columns and padding
+  
+  -- Name column gets remaining space
+  local name_width = math.max(15, win_width - id_width - status_width - started_width - duration_width - separator_width)
+  
+  -- Total width calculation
+  local total_width = id_width + name_width + status_width + started_width + duration_width + separator_width
+  
+  -- Header line
+  local header_text = ' R Background Jobs '
+  local header_padding = math.max(0, total_width - 2 - #header_text)
+  local left_pad = math.floor(header_padding / 2)
+  local right_pad = header_padding - left_pad
+  table.insert(lines, '╭' .. string.rep('─', left_pad) .. header_text .. string.rep('─', right_pad) .. '╮')
+  table.insert(highlights_to_apply, {line = #lines, hl_group = 'RJobsBorder'})
+  
+  -- Column headers
+  local header = string.format(
+    '│ %s │ %s │ %s │ %s │ %s │',
+    pad('ID', id_width),
+    pad('Name', name_width),
+    pad('Status', status_width),
+    pad('Started', started_width),
+    pad('Duration', duration_width)
+  )
+  table.insert(lines, header)
+  table.insert(highlights_to_apply, {line = #lines, hl_group = 'RJobsHeader'})
+  
+  -- Separator line
+  local separator = string.format(
+    '├%s┼%s┼%s┼%s┼%s┤',
+    string.rep('─', id_width + 2),
+    string.rep('─', name_width + 2),
+    string.rep('─', status_width + 2),
+    string.rep('─', started_width + 2),
+    string.rep('─', duration_width + 2)
+  )
+  table.insert(lines, separator)
+  table.insert(highlights_to_apply, {line = #lines, hl_group = 'RJobsBorder'})
   
   -- Job rows
   if #jobs == 0 then
-    table.insert(lines, '│                      No jobs yet                         │')
+    local empty_msg = 'No jobs yet'
+    local empty_padding = math.max(0, total_width - 4 - #empty_msg)
+    local empty_left = math.floor(empty_padding / 2)
+    local empty_right = empty_padding - empty_left
+    table.insert(lines, '│ ' .. string.rep(' ', empty_left) .. empty_msg .. string.rep(' ', empty_right) .. ' │')
   else
     for _, job in ipairs(jobs) do
       local line = string.format(
-        '│ %-4d  %-25s %-12s %-10s %-8s │',
-        job.id,
-        -- Truncate name if too long
-        #job.name > 25 and job.name:sub(1, 22) .. '...' or job.name,
-        job:get_status_display(),
-        job:get_start_time_str(),
-        job:get_duration_str()
+        '│ %s │ %s │ %s │ %s │ %s │',
+        pad(tostring(job.id), id_width),
+        pad(job.name, name_width),
+        pad(job:get_status_display(), status_width),
+        pad(job:get_start_time_str(), started_width),
+        pad(job:get_duration_str(), duration_width)
       )
       table.insert(lines, line)
+      
+      -- Add status-specific highlighting
+      local hl_group = 'Normal'
+      if job.status == 'running' then
+        hl_group = 'RJobsRunning'
+      elseif job.status == 'completed' then
+        hl_group = 'RJobsCompleted'
+      elseif job.status == 'failed' then
+        hl_group = 'RJobsFailed'
+      elseif job.status == 'cancelled' then
+        hl_group = 'RJobsCancelled'
+      end
+      
+      -- Highlight the status column
+      table.insert(highlights_to_apply, {
+        line = #lines,
+        hl_group = hl_group,
+        col_start = id_width + name_width + 8,  -- Start of status column
+        col_end = id_width + name_width + status_width + 8  -- End of status column
+      })
     end
   end
   
-  -- Footer with help
-  table.insert(lines, '│                                                          │')
-  table.insert(lines, '│ <CR>: view | d: delete | c: cancel | r: refresh | q: close │')
-  table.insert(lines, '└──────────────────────────────────────────────────────────┘')
+  -- Footer separator
+  table.insert(lines, '├' .. string.rep('─', total_width - 2) .. '┤')
+  table.insert(highlights_to_apply, {line = #lines, hl_group = 'RJobsBorder'})
+  
+  -- Help text
+  local help_text = '<CR>: view │ d: delete │ c: cancel │ r: refresh │ q: close'
+  local help_padding = math.max(0, total_width - 4 - #help_text)
+  local help_left = math.floor(help_padding / 2)
+  local help_right = help_padding - help_left
+  table.insert(lines, '│ ' .. string.rep(' ', help_left) .. help_text .. string.rep(' ', help_right) .. ' │')
+  table.insert(highlights_to_apply, {line = #lines, hl_group = 'RJobsHelp'})
+  
+  -- Bottom border
+  table.insert(lines, '╰' .. string.rep('─', total_width - 2) .. '╯')
+  table.insert(highlights_to_apply, {line = #lines, hl_group = 'RJobsBorder'})
   
   -- Update buffer content
   vim.api.nvim_buf_set_option(M.state.buf, 'modifiable', true)
   vim.api.nvim_buf_set_lines(M.state.buf, 0, -1, false, lines)
   vim.api.nvim_buf_set_option(M.state.buf, 'modifiable', false)
+  
+  -- Apply highlights
+  local ns_id = vim.api.nvim_create_namespace('r-jobs-ui')
+  vim.api.nvim_buf_clear_namespace(M.state.buf, ns_id, 0, -1)
+  
+  for _, hl in ipairs(highlights_to_apply) do
+    local line_idx = hl.line - 1  -- 0-based indexing
+    local col_start = hl.col_start or 0
+    local col_end = hl.col_end or -1
+    
+    vim.api.nvim_buf_add_highlight(
+      M.state.buf,
+      ns_id,
+      hl.hl_group,
+      line_idx,
+      col_start,
+      col_end
+    )
+  end
 end
 
 -- Create and open the window
@@ -163,6 +299,12 @@ function M.open()
   vim.api.nvim_win_set_option(M.state.win, 'relativenumber', false)
   vim.api.nvim_win_set_option(M.state.win, 'cursorline', true)
   vim.api.nvim_win_set_option(M.state.win, 'wrap', false)
+  
+  -- Add winbar for clear separation
+  vim.api.nvim_win_set_option(M.state.win, 'winbar', ' R Background Jobs ')
+  
+  -- Set window highlight to make it more distinct
+  vim.api.nvim_win_set_option(M.state.win, 'winhighlight', 'Normal:Normal,WinBar:RJobsTitle')
   
   M.state.is_open = true
   

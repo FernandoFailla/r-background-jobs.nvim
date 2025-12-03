@@ -14,6 +14,8 @@ M.defaults = {
     position = 'botright',      -- Split position
     size = 15,                   -- Lines (horizontal) or columns (vertical)
     orientation = 'horizontal',  -- 'horizontal' or 'vertical'
+    show_winbar = true,          -- Show window title bar
+    use_colors = true,           -- Use colored status indicators
   },
   
   -- Auto-refresh interval for jobs list (milliseconds)

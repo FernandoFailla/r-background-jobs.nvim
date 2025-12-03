@@ -5,6 +5,27 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.0] - 2025-12-03
+
+### Added
+- Dynamic table width calculation that adapts to window size
+- Color-coded status indicators (blue=running, green=completed, red=failed, orange=cancelled)
+- Highlight groups for better visual distinction (borders, headers, status)
+- WinBar title for clear split window separation
+- Improved box-drawing characters for cleaner table borders (╭╮╰╯├┤┼)
+- Configuration options for `show_winbar` and `use_colors`
+
+### Changed
+- Complete UI redesign with properly aligned columns
+- Column widths now adjust dynamically based on window width
+- Status column now displays icons with colors for better visibility
+- Help text formatting improved with better visual separation
+
+### Improved
+- Table rendering is now responsive and adapts to terminal width
+- Better visual hierarchy with highlight groups
+- Clearer separation between different UI elements
+
 ## [0.1.2] - 2025-12-03
 
 ### Fixed
