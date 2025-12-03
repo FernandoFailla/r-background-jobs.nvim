@@ -5,6 +5,46 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0] - 2025-12-03
+
+### Added
+- **Job Dependency System (DAG)**: Jobs can now depend on other jobs, creating directed acyclic graphs
+- New job statuses: `pending` (⏳) for jobs waiting on dependencies, `skipped` (⊘) for jobs skipped due to failed dependencies
+- **Command flags**:
+  - `--after=ID,ID` flag for `RJobStart` to specify job dependencies
+  - `--pipeline="name"` flag to group related jobs into named pipelines
+- **New commands**:
+  - `:RJobAddDependency <job_id> <depends_on_id>` - Add dependency after job creation
+  - `:RJobShowDependencies <job_id>` - Show dependency graph for a job
+- **Enhanced UI**:
+  - New "Pipeline" column showing pipeline names and position (e.g., "[Analysis] 1/3")
+  - New "Depends" column showing dependencies (e.g., "→ #1,#2")
+  - Hierarchical indentation in Name column for dependent jobs (tree-like visualization)
+  - Color-coded pending (yellow) and skipped (gray) statuses
+- **Dependency module** (`dependency.lua`):
+  - DAG validation with cycle detection using depth-first search
+  - Prevents circular dependencies
+  - Enforces max 10 dependencies per job (warning at 5)
+  - Methods for validation, checking readiness, and managing dependencies
+
+### Changed
+- `executor.start_job()` now accepts optional `opts` parameter for dependencies and pipeline metadata
+- `manager` now propagates job completion/failure to dependent jobs
+- Failed jobs automatically mark all dependent jobs as "skipped" with skip reason
+- `:RJobInfo` now displays dependency information (depends_on, dependents, pipeline, skip_reason)
+- UI table width increased (min: 100, max: 150) to accommodate new columns
+- Overhead calculation updated to 22 characters for 7 columns
+
+### Technical Details
+- Job objects now track: `depends_on`, `dependents`, `pipeline_name`, `pipeline_position`, `pipeline_total`, `skip_reason`
+- Jobs check `can_run()` before execution (validates all dependencies are completed)
+- Automatic dependency propagation on job state changes (completed/failed)
+- Skip propagation: when a job fails, all transitive dependents are marked as skipped
+
+### Documentation
+- Added comprehensive test documentation in `test-scripts/test-dependencies.md`
+- Documented all dependency test scenarios and expected behaviors
+
 ## [0.2.1] - 2025-12-03
 
 ### Fixed
