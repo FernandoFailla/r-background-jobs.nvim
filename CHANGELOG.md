@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.1] - 2025-12-03
+
+### Fixed
+- Fixed table border being cut off due to incorrect width calculations
+- Corrected overhead calculation from 9 to 16 characters (6 pipes + 10 padding spaces)
+- Table width now properly constrained to window width
+
+### Added
+- Min/max table width limits (70-100 columns by default) for better UX across different terminal sizes
+- Configuration options `ui.min_width` and `ui.max_width` to customize table size limits
+
+### Changed
+- Table width calculation now uses constrained `table_width` instead of raw `win_width`
+- Name column width calculation improved to prevent overflow
+- Better handling of narrow and wide terminals
+
 ## [0.2.0] - 2025-12-03
 
 ### Added

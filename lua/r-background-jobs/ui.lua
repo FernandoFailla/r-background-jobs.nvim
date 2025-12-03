@@ -124,24 +124,39 @@ function M.render()
   local lines = {}
   local highlights_to_apply = {}
   
+  -- Get configuration
+  local cfg = config.get()
+  
   -- Get window width for dynamic sizing
   local win_width = 80  -- default
   if M.state.win and vim.api.nvim_win_is_valid(M.state.win) then
     win_width = vim.api.nvim_win_get_width(M.state.win)
   end
   
-  -- Calculate column widths dynamically
+  -- Define table width limits for better UX across different terminal sizes
+  local MIN_TABLE_WIDTH = cfg.ui.min_width or 70   -- Minimum width to prevent breaking
+  local MAX_TABLE_WIDTH = cfg.ui.max_width or 100  -- Maximum width for comfortable reading
+  
+  -- Constrain table width to reasonable limits
+  local table_width = math.min(MAX_TABLE_WIDTH, math.max(MIN_TABLE_WIDTH, win_width))
+  
+  -- Calculate overhead: 6 pipes (│) + 10 padding spaces (2 per column × 5 columns)
+  local OVERHEAD = 16
+  
+  -- Define fixed column widths
   local id_width = 4
   local status_width = 14
   local started_width = 10
   local duration_width = 10
-  local separator_width = 9  -- │ between columns and padding
   
-  -- Name column gets remaining space
-  local name_width = math.max(15, win_width - id_width - status_width - started_width - duration_width - separator_width)
+  -- Calculate total width of fixed columns
+  local fixed_cols_width = id_width + status_width + started_width + duration_width
   
-  -- Total width calculation
-  local total_width = id_width + name_width + status_width + started_width + duration_width + separator_width
+  -- Name column gets remaining space (with minimum of 10)
+  local name_width = math.max(10, table_width - fixed_cols_width - OVERHEAD)
+  
+  -- Total width calculation (should always be <= win_width)
+  local total_width = fixed_cols_width + name_width + OVERHEAD
   
   -- Header line
   local header_text = ' R Background Jobs '

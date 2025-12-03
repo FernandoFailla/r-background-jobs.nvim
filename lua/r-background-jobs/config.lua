@@ -16,6 +16,8 @@ M.defaults = {
     orientation = 'horizontal',  -- 'horizontal' or 'vertical'
     show_winbar = true,          -- Show window title bar
     use_colors = true,           -- Use colored status indicators
+    min_width = 70,              -- Minimum table width
+    max_width = 100,             -- Maximum table width
   },
   
   -- Auto-refresh interval for jobs list (milliseconds)
