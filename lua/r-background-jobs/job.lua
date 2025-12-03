@@ -5,6 +5,7 @@ local M = {}
 
 -- Job statuses
 M.STATUS = {
+  QUEUED = 'queued',        -- Ready to run (no dependencies)
   PENDING = 'pending',      -- Waiting for dependencies
   RUNNING = 'running',
   COMPLETED = 'completed',
@@ -21,8 +22,8 @@ function M.new(script_path)
     id = utils.generate_id(),
     name = utils.get_filename(script_path),
     script_path = utils.get_absolute_path(script_path),
-    status = M.STATUS.RUNNING,
-    start_time = os.time(),
+    status = M.STATUS.QUEUED,  -- Start as queued, will become running when executed
+    start_time = nil,  -- Will be set when job actually starts executing
     end_time = nil,
     pid = nil,
     output_file = nil,
@@ -65,18 +66,27 @@ end
 -- Get job duration in seconds
 -- @return number Duration in seconds
 function M:get_duration()
+  if not self.start_time then
+    return 0
+  end
   return utils.calculate_duration(self.start_time, self.end_time)
 end
 
 -- Get formatted duration string
 -- @return string Formatted duration
 function M:get_duration_str()
+  if not self.start_time then
+    return "-"
+  end
   return utils.format_duration(self:get_duration())
 end
 
 -- Get formatted start time
 -- @return string Formatted start time
 function M:get_start_time_str()
+  if not self.start_time then
+    return "-"
+  end
   return utils.format_time(self.start_time)
 end
 

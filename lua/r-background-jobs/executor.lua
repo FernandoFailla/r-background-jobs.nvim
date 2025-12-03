@@ -13,6 +13,10 @@ local M = {}
 function M.execute_job(job)
   local cfg = config.get()
   
+  -- Mark job as running and set start time
+  job.status = 'running'
+  job.start_time = os.time()
+  
   -- Ensure output directory exists
   if not utils.ensure_dir(cfg.output_dir) then
     return false, "Failed to create output directory: " .. cfg.output_dir

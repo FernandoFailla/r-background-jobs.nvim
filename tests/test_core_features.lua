@@ -186,6 +186,12 @@ local function create_job_with_id(id, script_path, status)
   job.status = status or 'running'
   job.depends_on = job.depends_on or {}
   job.dependents = job.dependents or {}
+  
+  -- Set start_time for running/completed/failed jobs
+  if job.status == 'running' or job.status == 'completed' or job.status == 'failed' then
+    job.start_time = os.time()
+  end
+  
   table.insert(manager.jobs, job)
   return job
 end
@@ -204,8 +210,8 @@ do
   assert_not_nil(job.id, "Job should have an ID")
   assert_equal(job.name, "script.R", "Job name should be extracted from path")
   assert_equal(job.script_path, "/path/to/script.R", "Script path should be stored")
-  assert_equal(job.status, 'running', "Default status should be 'running'")
-  assert_not_nil(job.start_time, "Job should have start time")
+  assert_equal(job.status, 'queued', "Default status should be 'queued'")
+  assert_nil(job.start_time, "Job should not have start time until it runs")
   assert_nil(job.end_time, "Job should not have end time initially")
   assert_nil(job.pid, "Job should not have PID initially")
 end

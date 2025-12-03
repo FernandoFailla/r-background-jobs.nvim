@@ -5,6 +5,28 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.1] - 2025-12-03
+
+### Fixed
+- **Bug #1**: Pending jobs now correctly show "-" for Start Time and Duration instead of counting from creation time
+  - Jobs are created with `start_time = nil` (instead of `os.time()`)
+  - `get_start_time_str()`, `get_duration()`, and `get_duration_str()` now return "-" or 0 when `start_time` is nil
+  - Prevents duration from being counted while job is waiting for dependencies
+- **Bug #2**: Jobs now correctly transition through status lifecycle: `queued` → `running` → `completed`/`failed`
+  - Added new `queued` status for jobs ready to run (no dependencies)
+  - Default job status changed from `running` to `queued`
+  - `executor.execute_job()` now sets `status = 'running'` and `start_time = os.time()` when execution begins
+  - Ensures jobs show proper status in UI at all stages
+
+### Added
+- New job status: `queued` (default for newly created jobs)
+- Comprehensive bug fixes test suite (`tests/test_bug_fixes.lua`) with 52 tests
+- Tests validate correct start_time handling and status transitions
+
+### Changed
+- Job lifecycle now: `queued` (creation) → `pending` (has dependencies) → `running` (executing) → `completed`/`failed`/`cancelled`
+- Jobs with dependencies start as `pending`, jobs without dependencies start as `queued`
+
 ## [0.3.0] - 2025-12-03
 
 ### Added

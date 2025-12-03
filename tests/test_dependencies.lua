@@ -102,6 +102,12 @@ local function create_job_with_id(id, script_path, status)
   job.status = status or 'running'
   job.depends_on = job.depends_on or {}
   job.dependents = job.dependents or {}
+  
+  -- Set start_time for running/completed/failed jobs
+  if job.status == 'running' or job.status == 'completed' or job.status == 'failed' then
+    job.start_time = os.time()
+  end
+  
   table.insert(manager.jobs, job)
   return job
 end
