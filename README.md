@@ -1,5 +1,7 @@
 # r-background-jobs.nvim
 
+> **Note:** This project was fully built using AI assistance (vibe code/AI coding tools). While functional, users should be aware of this development approach.
+
 A Neovim plugin that brings RStudio-like background job execution to R development in Neovim.
 
 ## Features
